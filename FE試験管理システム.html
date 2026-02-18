@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FE試験管理システム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .error-border { border: 2px solid #ef4444 !important; }
+        .error-text { color: #ef4444; font-size: 0.875rem; margin-top: 0.25rem; display: none; }
+        
+        /* ローディングアニメーション */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md border border-slate-200">
+        <h1 class="text-2xl font-bold text-slate-800 mb-6 text-center border-b pb-4">📝 試験結果 登録</h1>
+
+        <form id="examForm" class="space-y-5">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">取り組んだ日付</label>
+                <input type="date" id="date" name="date" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                <p id="error-date" class="error-text">日付を選択してください</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">試験回（例：令和5年）</label>
+                <input type="text" id="examName" name="examName" placeholder="例：令和5年 免除試験" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                <p id="error-examName" class="error-text">試験回を入力してください</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">科目</label>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="relative flex items-center justify-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500">
+                        <input type="radio" name="category" value="科目A" class="hidden">
+                        <span class="text-slate-600">科目A</span>
+                    </label>
+                    <label class="relative flex items-center justify-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50 transition-all has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500">
+                        <input type="radio" name="category" value="科目B" class="hidden">
+                        <span class="text-slate-600">科目B</span>
+                    </label>
+                </div>
+                <p id="error-category" class="error-text">科目を選択してください</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">正答率 (%)</label>
+                <input type="number" id="score" name="score" min="0" max="100" placeholder="0-100" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                <p id="error-score" class="error-text">0〜100の数値を入力してください</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">備考（自由記述）</label>
+                <textarea id="memo" name="memo" rows="2" class="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"></textarea>
+            </div>
+
+            <button type="button" onclick="submitForm()" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all active:scale-95 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                データを送信する
+            </button>
+        </form>
+
+        <div id="statusMessage" class="mt-4 p-4 rounded-lg hidden text-center font-medium"></div>
+    </div>
+
+    <script>
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwNgjjbqMYzZBB04dvgIwXNJoH5oO10H-E7WrC_De2VLce7AGr46uwnPb71SuGBW9c-/exec";//デプロイURL添付先
+        const TIMEOUT_LIMIT = 10000; // 10秒でタイムアウト
+
+        async function submitForm() {
+            const btn = document.getElementById('submitBtn');
+            const statusMsg = document.getElementById('statusMessage');
+            
+            // --- フォームデータの取得 ---
+            const date = document.getElementById('date');
+            const examName = document.getElementById('examName');
+            const score = document.getElementById('score');
+            const memo = document.getElementById('memo');
+            const categorySelect = document.querySelector('input[name="category"]:checked');
+
+            // --- 重複送信防止 & UI初期化 ---
+            btn.disabled = true; // 送信中ボタン無効化
+            btn.innerHTML = '<span class="spinner"></span>送信中...';
+            statusMsg.classList.add('hidden');
+            document.querySelectorAll('.error-text').forEach(e => e.style.display = 'none');
+            document.querySelectorAll('input').forEach(i => i.classList.remove('error-border'));
+
+            // --- バリデーション ---
+            let isValid = true;
+            if (!date.value) { isValid = false; date.classList.add('error-border'); document.getElementById('error-date').style.display = 'block'; }
+            if (!examName.value.trim()) { isValid = false; examName.classList.add('error-border'); document.getElementById('error-examName').style.display = 'block'; }
+            if (!categorySelect) { isValid = false; document.getElementById('error-category').style.display = 'block'; }
+            if (score.value === "" || score.value < 0 || score.value > 100) { isValid = false; score.classList.add('error-border'); document.getElementById('error-score').style.display = 'block'; }
+
+            if (!isValid) {
+                btn.disabled = false; // 再入力のため解除
+                btn.innerText = "データを送信する";
+                return;
+            }
+
+            // --- 通信処理 (タイムアウト付き) ---
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_LIMIT);
+
+            try {
+                const formData = {
+                    date: date.value,
+                    examName: examName.value,
+                    category: categorySelect.value,
+                    score: score.value,
+                    memo: memo.value
+                };
+
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // GASへのPOSTでよく使われる設定
+                    body: JSON.stringify(formData),
+                    headers: { 'Content-Type': 'text/plain' },
+                    signal: controller.signal
+                });
+
+                // 通信成功
+                clearTimeout(timeoutId);
+                statusMsg.classList.remove('hidden');
+                statusMsg.classList.add('bg-green-100', 'text-green-700');
+                statusMsg.innerText = "✅ Success: スプレッドシートに保存されました";
+                
+                // フォームリセット
+                document.getElementById('examForm').reset();
+
+            } catch (error) {
+                statusMsg.classList.remove('hidden');
+                statusMsg.classList.add('bg-red-100', 'text-red-700');
+
+                if (error.name === 'AbortError') {
+                    statusMsg.innerText = "❌ 408 Request Timeout: 応答時間が過ぎました";
+                } else {
+                    statusMsg.innerText = "❌ Error: 送信に失敗しました";
+                }
+            } finally {
+                btn.disabled = false; // 再度送信可能にする
+                btn.innerText = "データを送信する";
+                clearTimeout(timeoutId);
+            }
+        }
+    </script>
+</body>
+</html>
